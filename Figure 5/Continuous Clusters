@@ -1,0 +1,442 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import time
+
+# -----------------------------
+# Neuron parameters
+# -----------------------------
+num_e = 8
+num_i1 = 8
+
+i_ext_e = 0.0
+i_ext_i1 = -1.0
+
+# HH-like parameters
+# ========= STN =========
+E_L_e,  E_K_e,  E_Na_e,  E_Ca_e = -60., -80.,  55., 140.
+g_L_e,  g_K_e,  g_Na_e,  g_T_e = 2.25, 45., 37.5, 0.5
+g_Ca_e, g_AHP_e = 0.5, 9.
+k_Ca_e, k1_e, e_e, c_e = 22.5, 15., 5e-5, 1.
+v_rev_ei1 = 0.
+
+tau0_n_e, tau1_n_e, theta_tau_n_e, sigma_tau_n_e, phi_n_e = 1, 100, -80, -26, 0.75
+tau0_h_e, tau1_h_e, theta_tau_h_e, sigma_tau_h_e, phi_h_e = 1, 500, -57, -3,  0.75
+tau0_r_e, tau1_r_e, theta_tau_r_e, sigma_tau_r_e, phi_r_e = 40, 17.5, 68, -2.2, 0.2
+
+theta_g_e, theta_H_e, sigma_H_e, alpha_e, beta_e = 30, -39, 8, 5, 1
+
+# ========= GPe =========
+E_L_i1, E_K_i1, E_Na_i1, E_Ca_i1 = -55., -80., 55., 120.
+g_L_i1, g_K_i1, g_Na_i1, g_T_i1 = 0.1, 30., 120., 0.5
+g_Ca_i1, g_AHP_i1 = 0.15, 30.
+k_Ca_i1, k1_i1, e_i1, c_i1 = 20., 30., 1e-4, 1.
+v_rev_i1i1 = -85.0
+v_rev_i1e = -85.0
+
+tau0_n_i1, tau1_n_i1, theta_tau_n_i1, sigma_tau_n_i1, phi_n_i1 = 0.05, 0.27, -40, -12, 0.05
+tau0_h_i1, tau1_h_i1, theta_tau_h_i1, sigma_tau_h_i1, phi_h_i1 = 0.05, 0.27, -40, -12, 0.05
+tau0_r_i1, phi_r_i1 = 30, 1
+
+theta_g_i1, theta_H_i1, sigma_H_i1, alpha_i1, beta_i1 = 20, -57, 2, 2, 0.04
+
+# -----------------------------
+# Midpoint integration parameters
+# -----------------------------
+t_final = 2000
+dt = 0.02
+N = int(t_final/dt)
+dt05 = dt / 2
+
+# -----------------------------
+# Sigmoidal functions
+# -----------------------------
+# ========= STN =========
+theta_n_e, sigma_n_e = -32, 8
+theta_m_e, sigma_m_e = -30, 15
+theta_h_e, sigma_h_e = -39, -3.1
+theta_r_e, sigma_r_e = -67, -2
+theta_s_e, sigma_s_e = -39, 8
+theta_a_e, sigma_a_e = -63, 7.8
+theta_b_e, sigma_b_e =  0.4, -0.1
+theta_H_e, sigma_H_e = -39, 8
+
+def n_e_inf(v): return 1 / (1 + np.exp(-(v - theta_n_e)/sigma_n_e))
+def m_e_inf(v): return 1 / (1 + np.exp(-(v - theta_m_e)/sigma_m_e))
+def h_e_inf(v): return 1 / (1 + np.exp(-(v - theta_h_e)/sigma_h_e))
+def r_e_inf(v): return 1 / (1 + np.exp(-(v - theta_r_e)/sigma_r_e))
+def s_e_inf(v): return 1 / (1 + np.exp(-(v - theta_s_e)/sigma_s_e))
+def a_e_inf(v): return 1 / (1 + np.exp(-(v - theta_a_e)/sigma_a_e))
+def b_e_inf(r): return (1 / (1 + np.exp((r - theta_b_e)/sigma_b_e))) - (1 / (1 + np.exp(-theta_b_e/sigma_b_e)))
+def H_e_inf(v): return 1 / (1 + np.exp(-(v - theta_H_e)/sigma_H_e))
+
+def tau_n_e(v): return (tau0_n_e+(tau1_n_e/(1+np.exp(-(v-theta_tau_n_e)/sigma_tau_n_e))))
+def tau_h_e(v): return (tau0_h_e+(tau1_h_e/(1+np.exp(-(v-theta_tau_h_e)/sigma_tau_h_e))))
+def tau_r_e(v): return (tau0_r_e+(tau1_r_e/(1+np.exp(-(v-theta_tau_r_e)/sigma_tau_r_e))))
+
+# ========= GPe =========
+theta_n_i1, sigma_n_i1 = -50, 14
+theta_m_i1, sigma_m_i1 = -37, 10
+theta_h_i1, sigma_h_i1 = -58, -12
+theta_r_i1, sigma_r_i1 = -70, -2
+theta_s_i1, sigma_s_i1 = -35, 2
+theta_a_i1, sigma_a_i1 = -57, 2
+theta_H_i1, sigma_H_i1 = -57, 2
+
+def n_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_n_i1) / sigma_n_i1))
+def m_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_m_i1) / sigma_m_i1))
+def h_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_h_i1) / sigma_h_i1))
+def r_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_r_i1) / sigma_r_i1))
+def s_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_s_i1) / sigma_s_i1))
+def a_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_a_i1) / sigma_a_i1))
+def H_i1_inf(v): return 1 / (1 + np.exp(-(v - theta_H_i1) / sigma_H_i1))
+
+def tau_n_i1(v): return (tau0_n_i1+(tau1_n_i1/(1+np.exp(-(v-theta_tau_n_i1)/sigma_tau_n_i1))))
+def tau_h_i1(v): return (tau0_h_i1+(tau1_h_i1/(1+np.exp(-(v-theta_tau_h_i1)/sigma_tau_h_i1))))
+def tau_r_i1(v): return tau0_r_i1
+
+# -----------------------------
+# Synaptic connectivity
+# -----------------------------
+g_hat_ei1 = 0.72      # gStoG (STN -> GPe)
+g_hat_i1e = 4.5       # gGtoS (GPe -> STN)
+g_hat_i1i1 = 0.06     # gGtoG (GPe -> GPe)
+
+adj_i1i1 = np.zeros((num_i1, num_i1))  # GPe → GPe
+adj_i1e = np.zeros((num_i1, num_e))    # GPe → STN (row = i1, column = e)
+adj_ei1 = np.zeros((num_e, num_i1))    # STN → GPe (row = e, column = i1)
+
+# 1) GPe to GPe: each cell inhibits its right and left neighbor
+for i in range(num_i1):
+    adj_i1i1[i, (i - 1) % num_i1] = 1
+    adj_i1i1[i, (i + 1) % num_i1] = 1
+
+# 2) GPe to STN (inhibitory): each GPe is connected to 2 STN cells (with offset +2 and -2)
+for i in range(num_i1):
+    target_stn_1 = (i + 2) % num_e
+    target_stn_2 = (i - 2) % num_e
+    adj_i1e[i, target_stn_1] = 1
+    adj_i1e[i, target_stn_2] = 1
+
+# 3) STN to GPe (inhibitory): each STN is connected to the nearest GPe
+for j in range(num_e):
+    nearest_gpe = j % num_i1
+    adj_ei1[j, nearest_gpe] = 1
+
+g_i1i1 = adj_i1i1 * g_hat_i1i1
+g_i1e = adj_i1e * g_hat_i1e
+g_ei1 = adj_ei1 * g_hat_ei1
+
+# -----------------------------
+# Old ICs
+# -----------------------------
+v_e = np.zeros(num_e)
+h_e = np.zeros(num_e)
+n_e = np.zeros(num_e)
+r_e = np.zeros(num_e)
+ca_e = np.zeros(num_e)
+s_ei1 = np.zeros((num_e, num_i1))
+
+for i in range(num_e):
+    if i in [0, 1, 4, 5]:
+        v_e[i] = -77.0
+        h_e[i] = 0.19
+        n_e[i] = 0.15
+        r_e[i] = 0.23
+        ca_e[i] = 0.06
+    else:
+        v_e[i] = -53.2
+        h_e[i] = 0.1
+        n_e[i] = 0.45
+        r_e[i] = 0.6
+        ca_e[i] = 0.12
+
+for i in range(num_e):
+    for j in range(num_i1):
+        if adj_ei1[i, j] == 1:
+            if i in [0,1,4,5]:
+                s_ei1[i, j] = 0.09
+            else:
+                s_ei1[i, j] = 0.5
+
+v_i1 = np.zeros(num_i1)
+h_i1 = np.zeros(num_i1)
+n_i1 = np.zeros(num_i1)
+r_i1 = np.zeros(num_i1)
+ca_i1 = np.zeros(num_i1)
+s_i1i1 = np.zeros((num_i1, num_i1))
+s_i1e = np.zeros((num_i1, num_e))
+
+for i in range(num_i1):
+    if i in [0, 1, 4, 5]:
+        v_i1[i] = -95.0
+        n_i1[i] = 0.04
+        h_i1[i] = 0.95
+        ca_i1[i] = 0.06
+    else:
+        v_i1[i] = -77.0
+        n_i1[i] = 0.78
+        h_i1[i] = 0.2
+        ca_i1[i] = 0.035
+    r_i1[i] = 0.9
+
+for i in range(num_i1):
+    for j in range(num_e):
+        if adj_i1e[i, j] == 1:
+            if i in [0,1,4,5]:
+                s_i1e[i, j] = 0.0
+            else:
+                s_i1e[i, j] = 0.44
+
+for i in range(num_i1):
+    for j in range(num_i1):
+        if adj_i1i1[i, j] == 1:
+            if i in [0,1,4,5]:
+                s_i1i1[i, j] = 0.09
+            else:
+                s_i1i1[i, j] = 0.5
+
+# -----------------------------
+# Initialize neurons
+# -----------------------------
+num_spikes_e, num_spikes_i1 = 0, 0
+t_e_spikes, t_i1_spikes = [], []
+i_e_spikes, i_i1_spikes = [], []
+
+lfp_e = np.zeros(N+1)
+lfp_i1 = np.zeros(N+1)
+lfp_e[0] = np.mean(v_e)
+lfp_i1[0] = np.mean(v_i1)
+
+idx_e_1, idx_e_2 = 0, 2
+idx_i1_1, idx_i1_2 = 0, 2
+
+v_e_trace_1 = np.zeros(N+1)
+v_e_trace_2 = np.zeros(N+1)
+v_i1_trace_1 = np.zeros(N+1)
+v_i1_trace_2 = np.zeros(N+1)
+
+v_e_trace_1[0] = v_e[idx_e_1]
+v_e_trace_2[0] = v_e[idx_e_2]
+v_i1_trace_1[0] = v_i1[idx_i1_1]
+v_i1_trace_2[0] = v_i1[idx_i1_2]
+
+# -----------------------------
+# Simulation loop
+# -----------------------------
+start_time = time.time()
+
+for k in range(1, N+1):
+    t_old = (k-1)*dt
+    t_new = k*dt
+
+    v_e_inc = (g_L_e*(E_L_e-v_e) + g_K_e*n_e**4*(E_K_e-v_e) + g_Na_e*m_e_inf(v_e)**3*h_e*(E_Na_e-v_e)
+               + g_Ca_e*s_e_inf(v_e)**2*(E_Ca_e-v_e) + g_T_e*a_e_inf(v_e)**3*b_e_inf(r_e)**2*(E_Ca_e-v_e)
+               + g_AHP_e*(E_K_e-v_e)*(ca_e/(ca_e+k1_e))  
+               + np.sum(g_i1e * s_i1e, axis=0) * (v_rev_i1e - v_e) + i_ext_e) / c_e
+
+    n_e_inc = phi_n_e*(n_e_inf(v_e)-n_e)/tau_n_e(v_e)
+    h_e_inc = phi_h_e*(h_e_inf(v_e)-h_e)/tau_h_e(v_e)
+    r_e_inc = phi_r_e*(r_e_inf(v_e)-r_e)/tau_r_e(v_e)
+    ca_e_inc = e_e*(g_Ca_e*s_e_inf(v_e)**2*(E_Ca_e-v_e) + g_T_e*a_e_inf(v_e)**3*b_e_inf(r_e)**2*(E_Ca_e-v_e) - k_Ca_e*ca_e)
+
+    s_i1e_inc = alpha_i1 * H_i1_inf(v_i1 - theta_g_i1).reshape(-1, 1) * (1 - s_i1e) - beta_i1 * s_i1e
+
+    v_i1_inc = (g_L_i1*(E_L_i1-v_i1) + g_K_i1*n_i1**4*(E_K_i1-v_i1) + g_Na_i1*m_i1_inf(v_i1)**3*h_i1*(E_Na_i1-v_i1)
+               + g_Ca_i1*s_i1_inf(v_i1)**2*(E_Ca_i1-v_i1) + g_T_i1*a_i1_inf(v_i1)**3*r_i1*(E_Ca_i1-v_i1)
+               + g_AHP_i1*(E_K_i1-v_i1)*(ca_i1/(ca_i1+k1_i1)) 
+               + np.sum(g_i1i1 * s_i1i1, axis=1) * (v_rev_i1i1 - v_i1)
+               + np.sum(g_ei1 * s_ei1, axis=0) * (v_rev_ei1 - v_i1) + i_ext_i1) / c_i1
+
+    n_i1_inc = phi_n_i1*(n_i1_inf(v_i1)-n_i1)/tau_n_i1(v_i1)
+    h_i1_inc = phi_h_i1*(h_i1_inf(v_i1)-h_i1)/tau_h_i1(v_i1)
+    r_i1_inc = phi_r_i1*(r_i1_inf(v_i1)-r_i1)/tau_r_i1(v_i1)
+    ca_i1_inc = e_i1*(g_Ca_i1*s_i1_inf(v_i1)**2*(E_Ca_i1-v_i1) + g_T_i1*a_i1_inf(v_i1)**3*r_i1*(E_Ca_i1-v_i1) - k_Ca_i1*ca_i1)
+    
+    s_ei1_inc = alpha_e * H_e_inf(v_e - theta_g_e).reshape(-1, 1) * (1 - s_ei1) - beta_e * s_ei1
+    s_i1i1_inc = alpha_i1 * H_i1_inf(v_i1 - theta_g_i1).reshape(-1, 1) * (1 - s_i1i1) - beta_i1 * s_i1i1
+
+    # Midpoint update
+    v_e_tmp = v_e + dt05*v_e_inc
+    n_e_tmp = n_e + dt05*n_e_inc
+    h_e_tmp = h_e + dt05*h_e_inc
+    r_e_tmp = r_e + dt05*r_e_inc
+    ca_e_tmp = ca_e + dt05*ca_e_inc
+    s_i1e_tmp = s_i1e + dt05*s_i1e_inc
+
+    v_i1_tmp = v_i1 + dt05*v_i1_inc
+    n_i1_tmp = n_i1 + dt05*n_i1_inc
+    h_i1_tmp = h_i1 + dt05*h_i1_inc
+    r_i1_tmp = r_i1 + dt05*r_i1_inc
+    ca_i1_tmp = ca_i1 + dt05*ca_i1_inc
+    s_ei1_tmp = s_ei1 + dt05*s_ei1_inc
+    s_i1i1_tmp = s_i1i1 + dt05*s_i1i1_inc
+
+    # Recompute increments at midpoint
+    v_e_inc = (g_L_e*(E_L_e-v_e_tmp) + g_K_e*n_e_tmp**4*(E_K_e-v_e_tmp) + g_Na_e*m_e_inf(v_e_tmp)**3*h_e_tmp*(E_Na_e-v_e_tmp)
+               + np.sum(g_i1e * s_i1e_tmp, axis=0) * (v_rev_i1e - v_e_tmp) + g_Ca_e*s_e_inf(v_e_tmp)**2*(E_Ca_e-v_e_tmp)
+               + g_T_e*a_e_inf(v_e_tmp)**3*b_e_inf(r_e_tmp)**2*(E_Ca_e-v_e_tmp) 
+               + g_AHP_e*(E_K_e-v_e_tmp)*(ca_e_tmp/(ca_e_tmp+k1_e)) + i_ext_e) / c_e
+    
+    n_e_inc = phi_n_e*(n_e_inf(v_e_tmp)-n_e_tmp)/tau_n_e(v_e_tmp)
+    h_e_inc = phi_h_e*(h_e_inf(v_e_tmp)-h_e_tmp)/tau_h_e(v_e_tmp)
+    r_e_inc = phi_r_e*(r_e_inf(v_e_tmp)-r_e_tmp)/tau_r_e(v_e_tmp)
+    ca_e_inc = e_e*(g_Ca_e*s_e_inf(v_e_tmp)**2*(E_Ca_e-v_e_tmp) + g_T_e*a_e_inf(v_e_tmp)**3*b_e_inf(r_e_tmp)**2*(E_Ca_e-v_e_tmp) - k_Ca_e*ca_e_tmp)
+    s_i1e_inc = alpha_i1 * H_i1_inf(v_i1_tmp - theta_g_i1).reshape(-1, 1) * (1 - s_i1e_tmp) - beta_i1 * s_i1e_tmp
+
+    v_i1_inc = (g_L_i1*(E_L_i1-v_i1_tmp) + g_K_i1*n_i1_tmp**4*(E_K_i1-v_i1_tmp) + g_Na_i1*m_i1_inf(v_i1_tmp)**3*h_i1_tmp*(E_Na_i1-v_i1_tmp)
+               + g_Ca_i1*s_i1_inf(v_i1_tmp)**2*(E_Ca_i1-v_i1_tmp) + g_T_i1*a_i1_inf(v_i1_tmp)**3*r_i1_tmp*(E_Ca_i1-v_i1_tmp)
+               + g_AHP_i1*(E_K_i1-v_i1_tmp)*(ca_i1_tmp/(ca_i1_tmp+k1_i1)) 
+               + np.sum(g_i1i1 * s_i1i1_tmp, axis=1) * (v_rev_i1i1 - v_i1_tmp)
+               + np.sum(g_ei1 * s_ei1_tmp, axis=0) * (v_rev_ei1 - v_i1_tmp) + i_ext_i1) / c_i1
+
+    n_i1_inc = phi_n_i1*(n_i1_inf(v_i1_tmp)-n_i1_tmp)/tau_n_i1(v_i1_tmp)
+    h_i1_inc = phi_h_i1*(h_i1_inf(v_i1_tmp)-h_i1_tmp)/tau_h_i1(v_i1_tmp)
+    r_i1_inc = phi_r_i1*(r_i1_inf(v_i1_tmp)-r_i1_tmp)/tau_r_i1(v_i1_tmp)
+    ca_i1_inc = e_i1*(g_Ca_i1*s_i1_inf(v_i1_tmp)**2*(E_Ca_i1-v_i1_tmp) + g_T_i1*a_i1_inf(v_i1_tmp)**3*r_i1_tmp*(E_Ca_i1-v_i1_tmp) - k_Ca_i1*ca_i1_tmp)
+    s_ei1_inc = alpha_e * H_e_inf(v_e_tmp - theta_g_e).reshape(-1, 1) * (1 - s_ei1_tmp) - beta_e * s_ei1_tmp
+    s_i1i1_inc = alpha_i1 * H_i1_inf(v_i1_tmp - theta_g_i1).reshape(-1, 1) * (1 - s_i1i1_tmp) - beta_i1 * s_i1i1_tmp
+
+    # Update state variables
+    v_e_old, v_i1_old = v_e.copy(), v_i1.copy()
+    v_e += dt*v_e_inc
+    h_e += dt*h_e_inc
+    n_e += dt*n_e_inc
+    r_e += dt*r_e_inc
+    ca_e += dt*ca_e_inc
+    s_i1e += dt*s_i1e_inc
+    v_i1 += dt*v_i1_inc
+    h_i1 += dt*h_i1_inc
+    n_i1 += dt*n_i1_inc
+    r_i1 += dt*r_i1_inc
+    ca_i1 += dt*ca_i1_inc
+    s_i1i1 += dt*s_i1i1_inc
+    s_ei1 += dt*s_ei1_inc
+
+    v_thr = 0.0
+    # Spike detection
+    which_e = np.where((v_e_old > v_thr) & (v_e <= v_thr))[0]
+    if len(which_e) > 0:
+        i_e_spikes.extend(which_e)
+        t_e_spikes.extend(((v_thr - v_e[which_e])*(k-1)*dt + (v_e_old[which_e] - v_thr)*k*dt) / (-v_e[which_e] + v_e_old[which_e]))
+        num_spikes_e += len(which_e)
+
+    which_i1 = np.where((v_i1_old > v_thr) & (v_i1 <= v_thr))[0]
+    if len(which_i1) > 0:
+        i_i1_spikes.extend(which_i1)
+        t_i1_spikes.extend(((v_thr - v_i1[which_i1])*(k-1)*dt + (v_i1_old[which_i1] - v_thr)*k*dt) / (-v_i1[which_i1] + v_i1_old[which_i1]))
+        num_spikes_i1 += len(which_i1)
+
+    lfp_e[k] = np.mean(v_e)
+    lfp_i1[k] = np.mean(v_i1)
+
+    v_e_trace_1[k] = v_e[idx_e_1]
+    v_e_trace_2[k] = v_e[idx_e_2]
+    v_i1_trace_1[k] = v_i1[idx_i1_1]
+    v_i1_trace_2[k] = v_i1[idx_i1_2]
+    
+print("Simulation finished in %.2f sec" % (time.time() - start_time))
+
+t_e_spikes = np.array(t_e_spikes)
+i_e_spikes = np.array(i_e_spikes)
+t_i_spikes = np.array(t_i1_spikes)
+i_i_spikes = np.array(i_i1_spikes)
+
+# =============================
+# Network Activity
+# =============================
+bin_size = 1
+bins = np.arange(0, t_final + bin_size, bin_size)
+
+counts_e, _ = np.histogram(t_e_spikes, bins=bins)
+counts_i1, _ = np.histogram(t_i_spikes, bins=bins)
+
+active_neurons_e = []
+for k in range(len(bins)-1):
+    ind_e = np.where((t_e_spikes >= bins[k]) & (t_e_spikes < bins[k+1]))[0]
+    neurons_in_bin_e = np.unique(i_e_spikes[ind_e])
+    active_neurons_e.append(len(neurons_in_bin_e))
+
+active_neurons_i1 = []
+for k in range(len(bins)-1):
+    ind_i1 = np.where((t_i1_spikes >= bins[k]) & (t_i1_spikes < bins[k+1]))[0]
+    neurons_in_bin_i1 = np.unique(i_i_spikes[ind_i1])
+    active_neurons_i1.append(len(neurons_in_bin_i1))
+
+active_neurons_e = np.array(active_neurons_e)
+fraction_active_e = active_neurons_e / num_e
+
+active_neurons_i1 = np.array(active_neurons_i1)
+fraction_active_i1 = active_neurons_i1 / num_i1
+
+bin_centers = bins[:-1] + bin_size/2
+
+# -----------------------------
+# Plotting
+# -----------------------------
+plt.figure(figsize=(10,6))
+
+# Rastergram
+plt.subplot(3,1,1)
+if len(t_i_spikes) > 0:
+    plt.plot(t_i_spikes, i_i_spikes, '.b', label='I-cells')
+if len(t_e_spikes) > 0:
+    plt.plot(t_e_spikes, i_e_spikes + num_i1 + 0.5, '.r', label='E-cells')
+
+plt.plot([0, t_final], [num_i1, num_i1], '--k', linewidth=1)
+plt.yticks([num_i1, num_e + num_i1], ['I-cells', 'E-cells'])
+plt.xlim(0, t_final)
+plt.ylim(0, num_e + num_i1 + 1)
+plt.xlabel('Time [ms]')
+plt.ylabel('Neuron index')
+plt.legend()
+plt.title(f'g_SG = {g_hat_ei1}, g_GS = {g_hat_i1e}, g_GG = {g_hat_i1i1}, i_ext_G = {i_ext_i1}')
+
+plt.subplot(3, 1, 2)
+plt.plot(bin_centers, fraction_active_e, 'r', linewidth=1)
+plt.xlabel('Time [ms]')
+plt.ylabel('STN')
+plt.ylim(0, 1)
+plt.xlim(0, t_final)
+
+plt.subplot(3, 1, 3)
+plt.plot(bin_centers, fraction_active_i1, 'b', linewidth=1)
+plt.xlabel('Time [ms]')
+plt.ylabel('GPe')
+plt.ylim(0, 1)
+plt.xlim(0, t_final)
+
+plt.tight_layout()
+plt.show()
+
+t = np.arange(N+1) * dt
+
+plt.figure(figsize=(10,6))
+
+plt.subplot(4,1,1)
+plt.plot(t, v_e_trace_1, 'k')
+plt.ylabel('STN 1')
+plt.xlim(0, t_final)
+plt.ylim(-100, 50)
+plt.title(f'g_SG = {g_hat_ei1}, g_GS = {g_hat_i1e}, g_GG = {g_hat_i1i1}, i_ext_G = {i_ext_i1}')
+
+plt.subplot(4,1,2)
+plt.plot(t, v_i1_trace_1, 'k')
+plt.ylabel('GPe 1')
+plt.xlim(0, t_final)
+plt.ylim(-100, 100)
+
+plt.subplot(4,1,3)
+plt.plot(t, v_e_trace_2, 'k')
+plt.ylabel('STN 2')
+plt.xlim(0, t_final)
+plt.ylim(-100, 50)
+
+plt.subplot(4,1,4)
+plt.plot(t, v_i1_trace_2, 'k')
+plt.ylabel('GPe 2')
+plt.xlabel('Time (ms)')
+plt.xlim(0, t_final)
+plt.ylim(-100, 100)
+
+plt.tight_layout()
+plt.show()
