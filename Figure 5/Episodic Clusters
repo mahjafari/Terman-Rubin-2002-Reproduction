@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import time
 
 # =============================================================
-# STN-GPe network (Terman et al. 2002, Fig. 5 structured network)
+# STN-GPe network (Terman et al. 2002, Fig. 5 structured network, episodic clustered oscillations)
 # =============================================================
 
 # -----------------------------
@@ -224,7 +224,7 @@ def rhs(v_e, h_e, n_e, r_e, ca_e, s_i1e,
     ds_i1e = alpha_i1*H_i1_inf(v_i1 - theta_g_i1).reshape(-1, 1)*(1 - s_i1e) - beta_i1*s_i1e
 
     # ---- GPe ----
-    # input to GPe cell j: sum over presynaptic cells (rows)  -> axis=0 (FIXED for GPe->GPe)
+    # input to GPe cell j: sum over presynaptic cells (rows)  -> axis=0
     I_gg = np.sum(g_i1i1 * s_i1i1, axis=0) * (v_rev_i1i1 - v_i1)
     I_sg = np.sum(g_ei1 * s_ei1, axis=0) * (v_rev_ei1 - v_i1)
     I_T_i1 = g_T_i1 * a_i1_inf(v_i1)**3 * r_i1 * (E_Ca_i1 - v_i1)
