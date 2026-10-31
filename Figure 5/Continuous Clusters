@@ -25,7 +25,6 @@ v_rev_ei1 = 0.0
 tau0_n_e, tau1_n_e, theta_tau_n_e, sigma_tau_n_e, phi_n_e = 1, 100, -80, -26, 0.75
 tau0_h_e, tau1_h_e, theta_tau_h_e, sigma_tau_h_e, phi_h_e = 1, 500, -57, -3,  0.75
 tau0_r_e, tau1_r_e, theta_tau_r_e, sigma_tau_r_e, phi_r_e = 40, 17.5, 68, -2.2, 0.2
-phi_ca_e = 0.75
 
 theta_g_e, alpha_e, beta_e = 30, 5, 1
 
@@ -221,7 +220,7 @@ def rhs(v_e, h_e, n_e, r_e, ca_e, s_i1e,
     dn_e = phi_n_e*(n_e_inf(v_e) - n_e)/tau_n_e(v_e)
     dh_e = phi_h_e*(h_e_inf(v_e) - h_e)/tau_h_e(v_e)
     dr_e = phi_r_e*(r_e_inf(v_e) - r_e)/tau_r_e(v_e)
-    dca_e = phi_ca_e*e_e*(I_Ca_e + I_T_e - k_Ca_e*ca_e)      # phi factor added
+    dca_e = e_e*(I_Ca_e + I_T_e - k_Ca_e*ca_e)
     ds_i1e = alpha_i1*H_i1_inf(v_i1 - theta_g_i1).reshape(-1, 1)*(1 - s_i1e) - beta_i1*s_i1e
 
     # ---- GPe ----
