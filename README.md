@@ -81,7 +81,7 @@ Replace `<script_name>.py` with the main script in that folder.
 
 ```
 .
-├── Figure 5/     # Code for the Figure 5 reproduction (the only figure included)
+├── Figure 5/     # Code for the Figure 5 reproduction
 ├── .gitignore
 ├── LICENSE
 ├── README.md
