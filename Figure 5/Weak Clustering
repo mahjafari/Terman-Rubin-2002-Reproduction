@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import time
 
 # =============================================================
-# STN-GPe network (Terman et al. 2002, Fig. 5 structured network)
+# STN-GPe network (Terman et al. 2002, Fig. 5 structured network, irregular clustered activity)
 # =============================================================
 
 # -----------------------------
